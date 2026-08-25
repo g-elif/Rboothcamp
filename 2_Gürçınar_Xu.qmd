@@ -224,13 +224,16 @@ Zch_Heubeeribüel Zch_Rosengartenstrasse Zch_Schimmelstrasse Zch_Stampfenbachstr
 
 So, here, we can not directly use "left_join(weather_wide, by = "datetime")
 
-Because one datetime has many weather locations。
+Because one datetime has many weather locations
 
 ```{r}
 
 ```
 
 ## 2.10 Checking the Joined Dataset
+
+
+
 
 ## 2.11 Geographic data (optional)
 
