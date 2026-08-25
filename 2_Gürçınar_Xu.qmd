@@ -1,0 +1,239 @@
+---
+title: "Exploring Traffic Volume in Zurich: The Role of Weather, Time and Location in 2025"
+format: html
+editor: visual
+---
+
+## Quarto
+
+Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+echo = TRUE,
+warning = FALSE,
+message = FALSE
+)
+```
+
+# 1. Introduction
+
+## 1.1 Background and Use Case
+
+Zurich has a large amount of motorized traffic, and traffic volume changes throughout the day and across locations. Weather conditions may also be associated with changes in traffic volume.
+
+## 1.2 Objectives
+
+The objective of this project is to explore traffic volume in Zurich during 2025 and investigate how traffic volume varies with time, weather conditions and location.
+
+## 1.3 Research Questions
+
+RQ1. Temporal patterns How does traffic volume vary across different times of the day and days of the week in Zurich in 2025?
+
+RQ2. Weather How are weather conditions associated with traffic volume in Zurich in 2025?
+
+RQ3. Location How does traffic volume differ across traffic counting locations and directions in Zurich in 2025?
+
+RQ4.Model To what extent can traffic volume be explained by temporal, weather and location-related variables?
+
+# 2. Data Sources
+
+```{r}
+library(dplyr)
+library(tidyverse)
+library(lubridate)
+```
+
+## 2.1 Inspecting the Traffic Data
+
+```{r}
+traffic <- read.csv("data/sid_dav_verkehrszaehlung_miv_od2031_2025.csv")
+```
+
+```{r}
+head(traffic, n = 10)
+```
+
+The original traffic dataset contains German variable names. Before the analysis, the variables were renamed into English to improve readability and consistency throughout the project.
+
+## 2.2 Renaming and Cleaning Traffic Variables
+
+```{r pressure, echo=FALSE}
+traffic <- traffic %>%
+  rename(
+    MSID = MSID,
+    MSName = MSName,
+    ZS_ID = ZSID,
+    ZS_Name = ZSName,
+    Axis = Achse,
+    House_Number = HNr,
+    Elevation = Hoehe,
+    Easting = EKoord,
+    Northing = NKoord,
+    Direction = Richtung,
+    K_Number = Knummer,
+    K_Name = Kname,
+    Number_of_Detectors = AnzDetektoren,
+    D1_ID = D1ID,
+    D2_ID = D2ID,
+    D3_ID = D3ID,
+    D4_ID = D4ID,
+    Measurement_DateTime = MessungDatZeit,
+    Delivery_Date = LieferDat,
+    Number_of_Vehicles = AnzFahrzeuge,
+    Vehicle_Count_Status = AnzFahrzeugeStatus
+  )
+```
+
+## Trraffic data dictionary
+
+MSID：Unique ID of the measurement station. MSName：Name of the measurement station. ZS_ID：Unique ID of the traffic counting point. ZS_Name:Name of the traffic counting point. Axis: The road axis associated with the traffic counting point. House_Number: House Number - Building/street number of the location. Elevation: Elevation - Height/elevation of the measurement location. Easting: Easting coordinate. Northing: Easting coordinate. Direction: Direction of traffic being measured. K_Number: Road Number. K_Name: Road Name. Number_of_Detectors:Number of Detectors. D1_ID:ID of the first detector. D2_ID:ID of the second detector. D3_ID:ID of the third detector. D4_ID:ID of the fourth detector. Measurement_DateTime: Date and exact time of measurement. Delivery_Date: Date when the measurement data were delivered to the system. Number_of_Vehicles: Number of vehicles detected during the measurement period. Vehicle_Count_Status:Quality or availability of the vehicle count data. (e.g., Gemessen → Measured;Fehlend → Missing;Imputiert → Imputed)
+
+## 2.3 Preparing Traffic Date and Time
+
+Convert the original Measurement_DateTime variable into a POSIXct datetime variable using the Europe/Zurich time zone.
+
+```{r}
+traffic <- traffic %>%
+  mutate(
+    datetime = ymd_hms(
+      Measurement_DateTime,
+      tz = "Europe/Zurich"
+    )
+  )
+```
+
+Displays the original and converted datetime values side by side to verify that the conversion was performed correctly.
+
+```{r}
+head(traffic %>% select(Measurement_DateTime, datetime), 10)
+```
+
+Checks the class of the new datetime variable to confirm that it has been successfully converted to POSIXct format.
+
+```{r}
+class(traffic$datetime)
+```
+
+The original traffic measurement timestamp was converted into a standardized POSIXct datetime format using the Europe/Zurich timezone. A new datetime variable was created for subsequent data integration.
+
+## 2.4 Inspecting and Cleaning the Meteorological/weather Data
+
+```{r}
+weather <- read.csv("data/ugz_ogd_meteo_h1_2025.csv")
+```
+
+```{r}
+head(weather, 10)
+```
+
+## 2.5 Renaming and Cleaning Weather Variables
+
+```{r}
+weather <- weather %>%
+  rename(
+    Measurement_DateTime = Datum,
+    Location = Standort,
+    Parameter = Parameter,
+    Interval = Intervall,
+    Unit = Einheit,
+    Value = Wert,
+    Status = Status
+  )
+```
+
+## Weather data dictionary
+
+Measurement_DateTime:Date and exact time when the weather measurement was taken. Location:Name of the weather station where the measurement was taken. Parameter:Type of weather variable being measured, e.g. temperature, relative humidity, or air pressure. Interval:Time interval over which the weather measurement was recorded, e.g. one hour (h1). Unit:Unit in which the weather parameter is measured, e.g. °C, %, hPa, or m/s. Value Measured Value:Numerical value of the corresponding weather parameter. Status:Status indicating the quality or processing state of the weather measurement.
+
+## 2.6 Preparing Meteorological/weather Date and Time
+
+Convert the original Measurement_DateTime variable from character format into POSIXct datetime format using the Europe/Zurich time zone.
+
+```{r}
+weather <- weather %>%
+  mutate(
+    datetime = as.POSIXct(
+      Measurement_DateTime,
+      format = "%Y-%m-%dT%H:%M%z",
+      tz = "Europe/Zurich"
+    )
+  )
+```
+
+Displays the converted datetime values in a standardized YYYY-MM-DD HH:MM:SS format to verify that the date and time were parsed correctly.
+
+```{r}
+format(weather$datetime, "%Y-%m-%d %H:%M:%S") %>%
+  head(10)
+```
+
+Counts missing (NA) values in the new datetime variable to check whether any observations failed to be converted.
+
+```{r}
+sum(is.na(weather$datetime))
+```
+
+## 2.7 Reshaping the Meteorological Data （long → wide）
+
+```{r}
+weather_wide <- weather %>%
+  select(
+    datetime,
+    Location,
+    Parameter,
+    Value
+  ) %>%
+  pivot_wider(
+    names_from = Parameter,
+    values_from = Value
+  )
+```
+
+```{r}
+head(weather_wide, 10)
+```
+
+## 2.8 Checking the Join Keys
+
+Check the time period.
+
+```{r}
+range(traffic$datetime, na.rm = TRUE)
+
+
+```
+
+```{r}
+range(weather_wide$datetime, na.rm = TRUE)
+```
+
+Both datasets cover the same time period, from 1 January 2025 at 00:00 to 31 December 2025 at 23:00. The timestamps are also represented in the same time zone (CET). Therefore, datetime can be used as a common temporal join key.
+
+```{r}
+weather_wide %>%
+  count(datetime, Location) %>%
+  filter(n > 1)
+```
+
+## 2.9 Joining Traffic and Weather Data
+
+Because in weather_wide, there are:
+
+Zch_Heubeeribüel Zch_Rosengartenstrasse Zch_Schimmelstrasse Zch_Stampfenbachstrasse
+
+So, here, we can not directly use "left_join(weather_wide, by = "datetime")
+
+Because one datetime has many weather locations。
+
+```{r}
+
+```
+
+## 2.10 Checking the Joined Dataset
+
+## 2.11 Geographic data (optional)
+
+```{r}
+geographic <- read.csv("data/dav.tbl_standort_zaehlung_miv_p.csv")
+```
