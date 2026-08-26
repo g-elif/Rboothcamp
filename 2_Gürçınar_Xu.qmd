@@ -18,7 +18,7 @@ message = FALSE
 
 # 1. Introduction
 
-## 1.1 Background and Use Case
+## 1.1 Background and use case
 
 Zurich has a large amount of motorized traffic, and traffic volume changes throughout the day and across locations. Weather conditions may also be associated with changes in traffic volume.
 
@@ -26,7 +26,7 @@ Zurich has a large amount of motorized traffic, and traffic volume changes throu
 
 The objective of this project is to explore traffic volume in Zurich during 2025 and investigate how traffic volume varies with time, weather conditions and location.
 
-## 1.3 Research Questions
+## 1.3 Research questions
 
 RQ1. Temporal patterns How does traffic volume vary across different times of the day and days of the week in Zurich in 2025?
 
@@ -36,15 +36,15 @@ RQ3. Location How does traffic volume differ across traffic counting locations a
 
 RQ4.Model To what extent can traffic volume be explained by temporal, weather and location-related variables?
 
-# 2. Data Sources
+# 2. Data sources
 
 ```{r}
-library(dplyr)
 library(tidyverse)
+library(dplyr)
 library(lubridate)
 ```
 
-## 2.1 Inspecting the Traffic Data
+## 2.1 Inspecting the traffic data
 
 ```{r}
 traffic <- read.csv("data/sid_dav_verkehrszaehlung_miv_od2031_2025.csv")
@@ -56,10 +56,78 @@ head(traffic, n = 10)
 
 The original traffic dataset contains German variable names. Before the analysis, the variables were renamed into English to improve readability and consistency throughout the project.
 
-## 2.2 Renaming and Cleaning Traffic Variables
+The number and percentage of missing values are calculated for each traffic variable. This helps identify variables that may require cleaning or special treatment before the exploratory analysis.
+
+```{r summary of missing values traffic, echo=FALSE}
+traffic |>
+  summarise(
+    across(
+      everything(),
+      \(x) sum(is.na(x))
+    )
+  ) |>
+  pivot_longer(
+    cols = everything(),
+    names_to = "variable",
+    values_to = "missing_values"
+  ) |>
+  mutate(
+    missing_percentage =
+      100 * missing_values / nrow(traffic)
+  ) |>
+  arrange(desc(missing_values))
+
+```
+
+Missing values were identified only in Number_of_Vehicles. A total of 107,602 traffic counts are missing, corresponding to approximately 5.84% of all traffic observations. The remaining variables do not contain values encoded as NA. However, some character variables may use labels such as “Unbekannt” instead of NA, which will be checked separately.
+
+```{r echo=FALSE}
+traffic |>
+  count(
+    Vehicle_Count_Status,
+    vehicle_count_missing = is.na(Number_of_Vehicles)
+  )
+```
+
+All missing values in Number_of_Vehicles have the status Fehlend, meaning “missing.” Measured (Gemessen) and imputed (Imputiert) observations contain vehicle-count values. The missing-value indicator is therefore consistent with the traffic count status.
+
+Some character variables may represent unavailable information with the label Unbekannt rather than an actual missing value. These values are counted separately.
+
+```{r summary 2, echo=FALSE}
+traffic |>
+  summarise(
+    across(
+      where(is.character),
+      \(x) sum(x == "Unbekannt", na.rm = TRUE)
+    )
+  ) |>
+  pivot_longer(
+    cols = everything(),
+    names_to = "variable",
+    values_to = "unknown_values"
+  ) |>
+  filter(unknown_values > 0) |>
+  arrange(desc(unknown_values))
+```
+
+```{r delivery date, echo=FALSE}
+traffic |>
+  count(
+    Delivery_Date,
+    sort = TRUE
+  )
+```
+
+Several character variables contain the label Unbekannt, meaning “unknown.” MSName and D4_ID are unknown for every observation and therefore provide no useful variation for the analysis. D2_ID, D3_ID, House_Number, and Elevation contain a mixture of known and unknown information. These values are not technically stored as NA, but they should still be treated as unavailable information when the relevant variables are analysed.
+
+Delivery_Date contains the same value, 6 May 2026, for every observation. It appears to represent an administrative delivery date rather than the traffic measurement date. Because the variable has no variation, it does not provide useful information for the exploratory analysis or statistical modelling. It will be retained in the original data but can be excluded from the analytical variables.
+
+These mentioned columns will be removed from the data set for the above mentioned reasons.
+
+## 2.2 Renaming and cleaning traffic variables
 
 ```{r pressure, echo=FALSE}
-traffic <- traffic %>%
+traffic <- traffic |> 
   rename(
     MSID = MSID,
     MSName = MSName,
@@ -85,39 +153,60 @@ traffic <- traffic %>%
   )
 ```
 
-## Trraffic data dictionary
-
-MSID：Unique ID of the measurement station. MSName：Name of the measurement station. ZS_ID：Unique ID of the traffic counting point. ZS_Name:Name of the traffic counting point. Axis: The road axis associated with the traffic counting point. House_Number: House Number - Building/street number of the location. Elevation: Elevation - Height/elevation of the measurement location. Easting: Easting coordinate. Northing: Easting coordinate. Direction: Direction of traffic being measured. K_Number: Road Number. K_Name: Road Name. Number_of_Detectors:Number of Detectors. D1_ID:ID of the first detector. D2_ID:ID of the second detector. D3_ID:ID of the third detector. D4_ID:ID of the fourth detector. Measurement_DateTime: Date and exact time of measurement. Delivery_Date: Date when the measurement data were delivered to the system. Number_of_Vehicles: Number of vehicles detected during the measurement period. Vehicle_Count_Status:Quality or availability of the vehicle count data. (e.g., Gemessen → Measured;Fehlend → Missing;Imputiert → Imputed)
-
-## 2.3 Preparing Traffic Date and Time
-
-Convert the original Measurement_DateTime variable into a POSIXct datetime variable using the Europe/Zurich time zone.
-
-```{r}
-traffic <- traffic %>%
-  mutate(
-    datetime = ymd_hms(
-      Measurement_DateTime,
-      tz = "Europe/Zurich"
-    )
+```{r remove the unusable columns, echo=FALSE}
+traffic <- traffic |>
+  select(
+    -MSName,
+    -D4_ID,
+    -D2_ID,
+    -D3_ID,
+    -House_Number,
+    -Elevation,
+    -Delivery_Date
   )
 ```
 
-Displays the original and converted datetime values side by side to verify that the conversion was performed correctly.
+## Traffic data dictionary
 
-```{r}
-head(traffic %>% select(Measurement_DateTime, datetime), 10)
+MSID：Unique ID of the measurement station. ZS_ID：Unique ID of the traffic counting point. ZS_Name:Name of the traffic counting point. Axis: The road axis associated with the traffic counting point. Easting: Easting coordinate. Northing: Northing coordinate. Direction: Direction of traffic being measured. K_Number: Road Number. K_Name: Road Name. Number_of_Detectors:Number of Detectors. D1_ID:ID of the first detector. Measurement_DateTime: Date and exact time of measurement. Number_of_Vehicles: Number of vehicles detected during the measurement period. Vehicle_Count_Status: Quality or availability of the vehicle count data. (e.g., Gemessen → Measured;Fehlend → Missing;Imputiert → Imputed)
+
+## 2.3 Preparing traffic date and time
+
+The traffic timestamp is stored as a character variable. To prepare the data for the hourly merge and temporal analysis, three new variables are created: join_hour for merging the datasets, date for the calendar date, and hour for the hour of the day.
+
+```{r echo=FALSE}
+traffic <- traffic |>
+  mutate(
+    join_hour = substr(Measurement_DateTime, 1, 13),
+    date = as.Date(substr(Measurement_DateTime, 1, 10)),
+    hour = as.integer(substr(Measurement_DateTime, 12, 13))
+  )
 ```
 
-Checks the class of the new datetime variable to confirm that it has been successfully converted to POSIXct format.
+The original traffic timestamp and the newly created time variables are displayed together to verify that they were extracted correctly.
 
-```{r}
-class(traffic$datetime)
+```{r echo=FALSE}
+traffic |>
+  select(
+    Measurement_DateTime,
+    join_hour,
+    date,
+    hour
+  ) |>
+  head(10)
 ```
 
-The original traffic measurement timestamp was converted into a standardized POSIXct datetime format using the Europe/Zurich timezone. A new datetime variable was created for subsequent data integration.
+The classes of the new time variables are checked to confirm that join_hour is stored as character text, date as a Date variable, and hour as an integer.
 
-## 2.4 Inspecting and Cleaning the Meteorological/weather Data
+```{r}
+class(traffic$join_hour)
+class(traffic$date)
+class(traffic$hour)
+```
+
+The original traffic timestamp was retained. A common hourly key was created for merging the datasets, together with separate date and numeric hour variables for the exploratory analysis.
+
+## 2.4 Inspecting and cleaning the meteorological and weather data
 
 ```{r}
 weather <- read.csv("data/ugz_ogd_meteo_h1_2025.csv")
@@ -127,10 +216,10 @@ weather <- read.csv("data/ugz_ogd_meteo_h1_2025.csv")
 head(weather, 10)
 ```
 
-## 2.5 Renaming and Cleaning Weather Variables
+## 2.5 Renaming and cleaning weather variables
 
 ```{r}
-weather <- weather %>%
+weather <- weather |>
   rename(
     Measurement_DateTime = Datum,
     Location = Standort,
@@ -142,100 +231,220 @@ weather <- weather %>%
   )
 ```
 
+```{r missing values check for weather, echo=FALSE}
+weather |>
+  summarise(
+    across(
+      everything(),
+      \(x) sum(is.na(x))
+    )
+  ) |>
+  pivot_longer(
+    cols = everything(),
+    names_to = "variable",
+    values_to = "missing_values"
+  ) |>
+  mutate(
+    missing_percentage =
+      100 * missing_values / nrow(traffic)
+  ) |>
+  arrange(desc(missing_values))
+```
+
+The weather dataset contains only 244 missing values, all in Value. This represents approximately 0.013% of the weather observations. Missing weather measurements are examined by weather parameter, station, and status before deciding how they should be handled.
+
+```{r filter for weather, echo=FALSE}
+weather |>
+  filter(is.na(Value)) |>
+  count(
+    Parameter,
+    Location,
+    Status,
+    sort = TRUE
+  )
+```
+
+Most of the missing values occur at the Rosengartenstrasse station, where temperature and relative humidity are each missing for 102 observations. The remaining missing values occur only occasionally across other stations and parameters. Because the overall missing percentage is very small, the observations will be retained as missing values at this stage. No values are removed or replaced before the exploratory analysis.
+
 ## Weather data dictionary
 
 Measurement_DateTime:Date and exact time when the weather measurement was taken. Location:Name of the weather station where the measurement was taken. Parameter:Type of weather variable being measured, e.g. temperature, relative humidity, or air pressure. Interval:Time interval over which the weather measurement was recorded, e.g. one hour (h1). Unit:Unit in which the weather parameter is measured, e.g. °C, %, hPa, or m/s. Value Measured Value:Numerical value of the corresponding weather parameter. Status:Status indicating the quality or processing state of the weather measurement.
 
-## 2.6 Preparing Meteorological/weather Date and Time
+## 2.6 Preparing meteorological and weather date and time
 
-Convert the original Measurement_DateTime variable from character format into POSIXct datetime format using the Europe/Zurich time zone.
+The weather timestamp is stored as a character variable and includes a UTC offset. To prepare the weather data for the hourly merge and temporal analysis, three new variables are created: join_hour for merging the datasets, date for the calendar date, and hour for the hour of the day.
 
 ```{r}
-weather <- weather %>%
+weather <- weather |>
   mutate(
-    datetime = as.POSIXct(
-      Measurement_DateTime,
-      format = "%Y-%m-%dT%H:%M%z",
-      tz = "Europe/Zurich"
-    )
+    join_hour = substr(Measurement_DateTime, 1, 13),
+    date = as.Date(substr(Measurement_DateTime, 1, 10)),
+    hour = as.integer(substr(Measurement_DateTime, 12, 13))
   )
 ```
 
-Displays the converted datetime values in a standardized YYYY-MM-DD HH:MM:SS format to verify that the date and time were parsed correctly.
+The original weather timestamp and the newly created time variables are displayed together to verify that they were extracted correctly.
 
 ```{r}
-format(weather$datetime, "%Y-%m-%d %H:%M:%S") %>%
+weather |>
+  select(
+    Measurement_DateTime,
+    join_hour,
+    date,
+    hour
+  ) |>
   head(10)
 ```
 
-Counts missing (NA) values in the new datetime variable to check whether any observations failed to be converted.
+The new weather time variables are checked for missing values to ensure that they were created successfully.
 
 ```{r}
-sum(is.na(weather$datetime))
+weather |>
+  summarise(
+    missing_join_hour = sum(is.na(join_hour)),
+    missing_date = sum(is.na(date)),
+    missing_hour = sum(is.na(hour))
+  )
 ```
 
-## 2.7 Reshaping the Meteorological Data （long → wide）
+## 2.7 Reshaping the meteorological data （long → wide）
+
+The weather dataset is initially stored in long format. Each hour contains measurements for several weather parameters at four weather stations. To obtain one row per hour, each combination of weather parameter and weather station will be transformed into a separate column.
 
 ```{r}
-weather_wide <- weather %>%
+weather_wide <- weather |>
   select(
-    datetime,
+    join_hour,
     Location,
     Parameter,
     Value
-  ) %>%
+  ) |>
   pivot_wider(
-    names_from = Parameter,
-    values_from = Value
+    id_cols = join_hour,
+    names_from = c(Parameter, Location),
+    values_from = Value,
+    names_glue = "{Parameter}_{Location}"
   )
 ```
 
 ```{r}
-head(weather_wide, 10)
-```
-
-## 2.8 Checking the Join Keys
-
-Check the time period.
-
-```{r}
-range(traffic$datetime, na.rm = TRUE)
-
-
+weather_wide |>
+  select(1:8) |>
+  head(10)
 ```
 
 ```{r}
-range(weather_wide$datetime, na.rm = TRUE)
+weather_wide |>
+  select(join_hour) |>
+  head(10)
 ```
 
-Both datasets cover the same time period, from 1 January 2025 at 00:00 to 31 December 2025 at 23:00. The timestamps are also represented in the same time zone (CET). Therefore, datetime can be used as a common temporal join key.
-
 ```{r}
-weather_wide %>%
-  count(datetime, Location) %>%
+weather_wide |>
+  count(join_hour) |>
   filter(n > 1)
 ```
 
-## 2.9 Joining Traffic and Weather Data
+## 2.8 Checking the join keys
 
-i have not fixed join, because in weather_wide, there are:
+Check the time period.
 
-Zch_Heubeeribüel Zch_Rosengartenstrasse Zch_Schimmelstrasse Zch_Stampfenbachstrasse
-
-So, here, we can not directly use "left_join(weather_wide, by = "datetime")
-
-Because one datetime has many weather locations.
-
-```{r}
+```{r check range traffic, echo=FALSE}
+range(traffic$join_hour, na.rm = TRUE)
 
 ```
 
-## 2.10 Checking the Joined Dataset
+```{r check range weather, echo=FALSE}
+range(weather_wide$join_hour, na.rm = TRUE)
+```
 
+Both datasets cover the period from 1 January 2025 at 00:00 to 31 December 2025 at 23:00. The join_hour variable has the same format and overall range in both datasets, making it suitable as the common hourly join key.
 
+Before merging, traffic hours are compared with weather hours to identify traffic observations that do not have a corresponding weather record.
+
+```{r compare correspondace as traffic is the ref data, echo=FALSE}
+traffic |>
+  distinct(join_hour) |>
+  anti_join(
+    weather_wide |>
+      distinct(join_hour),
+    by = "join_hour"
+  )
+```
+
+## 2.9 Joining traffic and weather data
+
+Initially, the weather data contained multiple rows per hour because measurements were recorded at four weather stations. A direct join would therefore have duplicated traffic observations. After reshaping the weather data, each combination of weather parameter and station is stored in a separate column, resulting in one row per hour. The datasets can now be safely joined using join_hour.
+
+```{r}
+traffic_weather <- traffic |>
+  left_join(
+    weather_wide,
+    by = "join_hour"
+  )
+```
+
+A left join should preserve all observations from the traffic dataset. Therefore, the number of rows before and after the join is compared.
+
+```{r}
+tibble(
+  dataset = c("Traffic before join", "Traffic and weather after join"),
+  number_of_rows = c(
+    nrow(traffic),
+    nrow(traffic_weather)
+  )
+)
+```
+
+## 2.10 Checking the joined data set
+
+The variables added by the weather join are displayed to confirm that the weather measurements were successfully included in the combined dataset.
+
+```{r}
+setdiff(
+  names(traffic_weather),
+  names(traffic)
+)
+```
+
+The join added 25 weather variables to the traffic dataset. Each variable represents a specific weather parameter measured at a particular weather station, such as temperature at Heubeeribüel or rainfall duration at Schimmelstrasse. This confirms that the weather data were succesfully added.
+
+```{r}
+traffic_weather |>
+  select(
+    join_hour,
+    Number_of_Vehicles,
+    starts_with("T_")
+  ) |>
+  head(10)
+```
+
+```{r}
+traffic_weather |>
+  select(
+    join_hour,
+    ZS_ID,
+    ZS_Name,
+    Axis,
+    Direction,
+    Easting,
+    Northing,
+    Number_of_Vehicles
+  ) |>
+  head(10)
+```
+
+```{r}
+traffic_weather |>
+  select(
+    join_hour,
+    ZS_ID,
+    ZS_Name,
+    Direction,
+    Number_of_Vehicles,
+    starts_with("T_")
+  ) |>
+  head(10)
+```
 
 ## 2.11 Geographic data (optional)
-
-```{r}
-geographic <- read.csv("data/dav.tbl_standort_zaehlung_miv_p.csv")
-```
