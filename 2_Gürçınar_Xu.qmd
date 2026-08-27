@@ -275,7 +275,7 @@ Measurement_DateTime:Date and exact time when the weather measurement was taken.
 The weather timestamp is stored as a character variable and includes a UTC offset. To prepare the weather data for the hourly merge and temporal analysis, three new variables are created: join_hour for merging the datasets, date for the calendar date, and hour for the hour of the day.
 
 ```{r}
-weather <- weather |>
+weather <- weather |> 
   mutate(
     join_hour = substr(Measurement_DateTime, 1, 13),
     date = as.Date(substr(Measurement_DateTime, 1, 10)),
@@ -435,7 +435,7 @@ traffic_weather |>
 ```
 
 ```{r}
-traffic_weather |>
+traffic_weather_selected <- traffic_weather |>
   select(
     join_hour,
     ZS_ID,
@@ -443,8 +443,251 @@ traffic_weather |>
     Direction,
     Number_of_Vehicles,
     starts_with("T_")
-  ) |>
-  head(10)
+  ) 
 ```
 
-## 2.11 Geographic data (optional)
+```{r}
+head(traffic_weather_selected, n = 10)
+```
+
+```{r}
+colnames(traffic_weather_selected)
+```
+
+```{r}
+str(traffic_weather_selected)
+```
+
+# 3. Plots
+
+## 3.1 RQ1 — Traffic volume over time
+
+How does traffic volume vary across different times of the day?
+
+################################################################
+<Task Splitting>
+
+- Around peak hours (e.g., 15pm–18pm), check whether location/direction differs. — Elif
+- Trend to leave/go to Zurich. Friday evening: leaving Zurich; weekend morning : go to Zurich. — Elif
+- Compare weekday (Monday–Friday) vs. weekend (Saturday–Sunday) changes/patterns. — Aki
+- Compare seasonal (e.g., summer, winter, etc.) hourly changes. — Aki
+################################################################
+
+
+### Average Traffic Volume by Hour
+
+```{r}
+traffic_hourly <- traffic_weather |>
+  group_by(hour) |>
+  summarise(
+    mean_traffic = mean(
+      Number_of_Vehicles,
+      na.rm = TRUE
+    ),
+    .groups = "drop"
+  )
+```
+
+```{r}
+ggplot(
+  traffic_hourly,
+  aes(
+    x = hour,
+    y = mean_traffic
+  )
+) +
+  geom_line() +
+  geom_point() +
+  labs(
+    title = "Average Traffic Volume by Hour",
+    x = "Hour of Day",
+    y = "Average Number of Vehicles"
+  ) +
+  theme_bw()
+```
+
+This chart shows the average traffic volume by hour across a single day: ・Overnight low: Traffic volume is lowest between midnight and 4 AM, bottoming out around 3 AM (roughly 50 vehicles). ・Morning peak: Volume rises sharply starting around 5 AM, climbing from about 140 to nearly 390 vehicles by 7 AM, then levels off at a relatively high plateau (around 400–460 vehicles) from 8 AM to 14 PM. ・Evening peak: Traffic reaches its daily maximum around 16–17 PM (approximately 530–540 vehicles). ・Evening decline: After 17 PM, volume drops steadily, falling to around 180 vehicles by 23 PM.
+
+Overall, the data shows a classic bimodal commuting pattern, with a gradual morning rise and a sharper, more concentrated evening peak — consistent with typical weekday vehicle traffic behavior.
+
+### Weekday vs weekend
+
+```{r}
+traffic_daytype <- traffic_weather |>
+  group_by(hour, day_type) |>
+  summarise(
+    mean_traffic = mean(
+      Number_of_Vehicles,
+      na.rm = TRUE
+    ),
+    .groups = "drop"
+  )
+```
+
+```{r}
+ggplot(
+  traffic_daytype,
+  aes(
+    x = hour,
+    y = mean_traffic,
+    colour = day_type
+  )
+) +
+  geom_line(linewidth = 1) +
+  geom_point() +
+  labs(
+    title = "Traffic Volume by Hour: Weekdays vs Weekends",
+    x = "Hour of Day",
+    y = "Average Number of Vehicles",
+    colour = "Day Type"
+  ) +
+  theme_bw()
+```
+
+This chart shows the key differences in traffic patterns between weekdays (red line) and weekends (teal line). ・Weekday traffic starts rising much earlier and more sharply (commute-driven), while weekend traffic rises more gradually. ・Weekday peaks (both morning and evening) are notably higher than weekend peaks, reflecting structured commuting behavior. ・Weekend traffic is more evenly distributed across daytime hours, lacking the two distinct peaks seen on weekdays. ・Both day types converge to similarly low volumes late at night, though weekends dip lower overnight.
+
+
+## 3.2 RQ2 — Weather and Traffic Volume
+
+How are weather conditions associated with traffic volume in Zurich in 2025?
+
+################################################################
+<Task Splitting>
+
+- Hour × weather condition	Weather effect across the day
+- Temperature vs traffic	Continuous relationship	
+ 
+
+################################################################
+
+### Does the association between temperature and traffic volume differ across meteorological stations?
+
+```{r}
+temperature_long <- traffic_weather_selected |>
+  select(
+    join_hour,
+    Number_of_Vehicles,
+    starts_with("T_")
+  ) |>
+  pivot_longer(
+    cols = starts_with("T_"),
+    names_to = "weather_station",
+    values_to = "temperature"
+  )
+```
+
+
+```{r}
+ggplot(
+  temperature_long,
+  aes(
+    x = temperature,
+    y = Number_of_Vehicles
+  )
+) +
+  geom_point(alpha = 0.15) +
+  geom_smooth(
+    method = "lm",
+    se = FALSE
+  ) +
+  facet_wrap(~ weather_station) +
+  labs(
+    title = "Temperature and Traffic Volume Across Weather Stations",
+    x = "Temperature (°C)",
+    y = "Number of Vehicles"
+  ) +
+  theme_bw()
+```
+
+## 3.3 RQ3 — Location and Traffic Volume
+
+How does traffic volume differ across traffic counting locations and directions in Zurich in 2025?
+
+################################################################
+<Task Splitting>
+
+
+
+################################################################
+
+
+```{r}
+traffic_location <- traffic_weather_selected |>
+  group_by(
+    ZS_Name,
+    Direction
+  ) |>
+  summarise(
+    mean_traffic = mean(
+      Number_of_Vehicles,
+      na.rm = TRUE
+    ),
+    .groups = "drop"
+  )
+```
+
+```{r}
+top_locations <- traffic_location |>
+  slice_max(mean_traffic, n = 20)  # Select Top 20 locations
+
+ggplot(
+  top_locations,
+  aes(
+    x = reorder(ZS_Name, mean_traffic),
+    y = mean_traffic,
+    colour = Direction
+  )
+) +
+  geom_point(size = 3) +
+  coord_flip() +
+  labs(
+    title = "Top 20 Locations by Average Traffic Volume",
+    x = "Traffic Counting Location",
+    y = "Average Number of Vehicles",
+    colour = "Direction"
+  ) +
+  theme_bw()
+```
+
+## 3.4 RQ4 — Combined Traffic + Weather Model
+
+To what extent can traffic volume be explained by temporal, weather and location-related variables?
+
+```{r}
+traffic_weather_selected <- traffic_weather_selected |>
+  mutate(
+    hour = factor(hour),
+    day_type = factor(day_type),
+    ZS_Name = factor(ZS_Name),
+    Direction = factor(Direction)
+  )
+```
+
+Model 01 — Time + Weather
+
+```{r}
+model_01 <- lm(
+  Number_of_Vehicles ~
+    hour +
+    day_type +
+    mean_temperature,
+  data = traffic_weather_selected
+)
+```
+
+```{r}
+summary(model_01)
+```
+
+Model 02 — Time + Weather + Location   (maybe need to consider interaction???)
+
+```{r}
+model_02 <- lm(
+  Number_of_Vehicles ~
+    hour +
+    day_type +
+    mean_temperature +
+    ZS_Name,
+  data = traffic_weather_selected
+)
+```
