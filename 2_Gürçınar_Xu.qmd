@@ -46,11 +46,11 @@ library(lubridate)
 
 ## 2.1 Inspecting the traffic data
 
-```{r}
+```{r cache=TRUE}
 traffic <- read.csv("data/sid_dav_verkehrszaehlung_miv_od2031_2025.csv")
 ```
 
-```{r}
+```{r cache=TRUE}
 head(traffic, n = 10)
 ```
 
@@ -58,7 +58,7 @@ The original traffic dataset contains German variable names. Before the analysis
 
 The number and percentage of missing values are calculated for each traffic variable. This helps identify variables that may require cleaning or special treatment before the exploratory analysis.
 
-```{r summary of missing values traffic, echo=FALSE}
+```{r summary of missing values traffic, cache=TRUE, echo=FALSE}
 traffic |>
   summarise(
     across(
@@ -81,7 +81,7 @@ traffic |>
 
 Missing values were identified only in Number_of_Vehicles. A total of 107,602 traffic counts are missing, corresponding to approximately 5.84% of all traffic observations. The remaining variables do not contain values encoded as NA. However, some character variables may use labels such as “Unbekannt” instead of NA, which will be checked separately.
 
-```{r echo=FALSE}
+```{r cache=TRUE, echo=FALSE}
 traffic |>
   count(
     Vehicle_Count_Status,
@@ -93,7 +93,7 @@ All missing values in Number_of_Vehicles have the status Fehlend, meaning “mis
 
 Some character variables may represent unavailable information with the label Unbekannt rather than an actual missing value. These values are counted separately.
 
-```{r summary 2, echo=FALSE}
+```{r summary 2, cache=TRUE, echo=FALSE}
 traffic |>
   summarise(
     across(
@@ -110,7 +110,7 @@ traffic |>
   arrange(desc(unknown_values))
 ```
 
-```{r delivery date, echo=FALSE}
+```{r delivery date, cache=TRUE, echo=FALSE}
 traffic |>
   count(
     Delivery_Date,
@@ -126,7 +126,7 @@ These mentioned columns will be removed from the data set for the above mentione
 
 ## 2.2 Renaming and cleaning traffic variables
 
-```{r pressure, echo=FALSE}
+```{r pressure, cache=TRUE, echo=FALSE}
 traffic <- traffic |> 
   rename(
     MSID = MSID,
@@ -153,7 +153,7 @@ traffic <- traffic |>
   )
 ```
 
-```{r remove the unusable columns, echo=FALSE}
+```{r remove the unusable columns, cache=TRUE, echo=FALSE}
 traffic <- traffic |>
   select(
     -MSName,
@@ -174,7 +174,7 @@ MSID：Unique ID of the measurement station. ZS_ID：Unique ID of the traffic co
 
 The traffic timestamp is stored as a character variable. To prepare the data for the hourly merge and temporal analysis, three new variables are created: join_hour for merging the datasets, date for the calendar date, and hour for the hour of the day.
 
-```{r echo=FALSE}
+```{r cache=TRUE, echo=FALSE}
 traffic <- traffic |>
   mutate(
     join_hour = substr(Measurement_DateTime, 1, 13),
@@ -185,7 +185,7 @@ traffic <- traffic |>
 
 The original traffic timestamp and the newly created time variables are displayed together to verify that they were extracted correctly.
 
-```{r echo=FALSE}
+```{r cache=TRUE, echo=FALSE}
 traffic |>
   select(
     Measurement_DateTime,
@@ -198,7 +198,7 @@ traffic |>
 
 The classes of the new time variables are checked to confirm that join_hour is stored as character text, date as a Date variable, and hour as an integer.
 
-```{r}
+```{r cache=TRUE}
 class(traffic$join_hour)
 class(traffic$date)
 class(traffic$hour)
@@ -208,17 +208,17 @@ The original traffic timestamp was retained. A common hourly key was created for
 
 ## 2.4 Inspecting and cleaning the meteorological and weather data
 
-```{r}
+```{r cache=TRUE}
 weather <- read.csv("data/ugz_ogd_meteo_h1_2025.csv")
 ```
 
-```{r}
+```{r cache=TRUE}
 head(weather, 10)
 ```
 
 ## 2.5 Renaming and cleaning weather variables
 
-```{r}
+```{r cache=TRUE}
 weather <- weather |>
   rename(
     Measurement_DateTime = Datum,
@@ -231,7 +231,7 @@ weather <- weather |>
   )
 ```
 
-```{r missing values check for weather, echo=FALSE}
+```{r missing values check for weather, cache=TRUE, echo=FALSE}
 weather |>
   summarise(
     across(
@@ -253,7 +253,7 @@ weather |>
 
 The weather dataset contains only 244 missing values, all in Value. This represents approximately 0.013% of the weather observations. Missing weather measurements are examined by weather parameter, station, and status before deciding how they should be handled.
 
-```{r filter for weather, echo=FALSE}
+```{r filter for weather, cache=TRUE, echo=FALSE}
 weather |>
   filter(is.na(Value)) |>
   count(
@@ -274,7 +274,7 @@ Measurement_DateTime:Date and exact time when the weather measurement was taken.
 
 The weather timestamp is stored as a character variable and includes a UTC offset. To prepare the weather data for the hourly merge and temporal analysis, three new variables are created: join_hour for merging the datasets, date for the calendar date, and hour for the hour of the day.
 
-```{r}
+```{r cache=TRUE}
 weather <- weather |> 
   mutate(
     join_hour = substr(Measurement_DateTime, 1, 13),
@@ -285,7 +285,7 @@ weather <- weather |>
 
 The original weather timestamp and the newly created time variables are displayed together to verify that they were extracted correctly.
 
-```{r}
+```{r cache=TRUE}
 weather |>
   select(
     Measurement_DateTime,
@@ -298,7 +298,7 @@ weather |>
 
 The new weather time variables are checked for missing values to ensure that they were created successfully.
 
-```{r}
+```{r cache=TRUE}
 weather |>
   summarise(
     missing_join_hour = sum(is.na(join_hour)),
@@ -311,7 +311,7 @@ weather |>
 
 The weather dataset is initially stored in long format. Each hour contains measurements for several weather parameters at four weather stations. To obtain one row per hour, each combination of weather parameter and weather station will be transformed into a separate column.
 
-```{r}
+```{r cache=TRUE}
 weather_wide <- weather |>
   select(
     join_hour,
@@ -327,19 +327,19 @@ weather_wide <- weather |>
   )
 ```
 
-```{r}
+```{r cache=TRUE}
 weather_wide |>
   select(1:8) |>
   head(10)
 ```
 
-```{r}
+```{r cache=TRUE}
 weather_wide |>
   select(join_hour) |>
   head(10)
 ```
 
-```{r}
+```{r cache=TRUE}
 weather_wide |>
   count(join_hour) |>
   filter(n > 1)
@@ -349,12 +349,12 @@ weather_wide |>
 
 Check the time period.
 
-```{r check range traffic, echo=FALSE}
+```{r check range traffic, cache=TRUE, echo=FALSE}
 range(traffic$join_hour, na.rm = TRUE)
 
 ```
 
-```{r check range weather, echo=FALSE}
+```{r check range weather, cache=TRUE, echo=FALSE}
 range(weather_wide$join_hour, na.rm = TRUE)
 ```
 
@@ -362,7 +362,7 @@ Both datasets cover the period from 1 January 2025 at 00:00 to 31 December 2025 
 
 Before merging, traffic hours are compared with weather hours to identify traffic observations that do not have a corresponding weather record.
 
-```{r compare correspondace as traffic is the ref data, echo=FALSE}
+```{r compare correspondace as traffic is the ref data, cache=TRUE, echo=FALSE}
 traffic |>
   distinct(join_hour) |>
   anti_join(
@@ -376,7 +376,7 @@ traffic |>
 
 Initially, the weather data contained multiple rows per hour because measurements were recorded at four weather stations. A direct join would therefore have duplicated traffic observations. After reshaping the weather data, each combination of weather parameter and station is stored in a separate column, resulting in one row per hour. The datasets can now be safely joined using join_hour.
 
-```{r}
+```{r cache=TRUE}
 traffic_weather <- traffic |>
   left_join(
     weather_wide,
@@ -386,7 +386,7 @@ traffic_weather <- traffic |>
 
 A left join should preserve all observations from the traffic dataset. Therefore, the number of rows before and after the join is compared.
 
-```{r}
+```{r cache=TRUE}
 tibble(
   dataset = c("Traffic before join", "Traffic and weather after join"),
   number_of_rows = c(
@@ -400,7 +400,7 @@ tibble(
 
 The variables added by the weather join are displayed to confirm that the weather measurements were successfully included in the combined dataset.
 
-```{r}
+```{r cache=TRUE}
 setdiff(
   names(traffic_weather),
   names(traffic)
@@ -409,7 +409,7 @@ setdiff(
 
 The join added 25 weather variables to the traffic dataset. Each variable represents a specific weather parameter measured at a particular weather station, such as temperature at Heubeeribüel or rainfall duration at Schimmelstrasse. This confirms that the weather data were succesfully added.
 
-```{r}
+```{r cache=TRUE}
 traffic_weather |>
   select(
     join_hour,
@@ -419,7 +419,7 @@ traffic_weather |>
   head(10)
 ```
 
-```{r}
+```{r cache=TRUE}
 traffic_weather |>
   select(
     join_hour,
@@ -434,7 +434,7 @@ traffic_weather |>
   head(10)
 ```
 
-```{r}
+```{r cache=TRUE}
 traffic_weather_selected <- traffic_weather |>
   select(
     join_hour,
@@ -446,16 +446,12 @@ traffic_weather_selected <- traffic_weather |>
   ) 
 ```
 
-```{r}
+```{r cache=TRUE}
 head(traffic_weather_selected, n = 10)
 ```
 
-```{r}
+```{r cache=TRUE}
 colnames(traffic_weather_selected)
-```
-
-```{r}
-str(traffic_weather_selected)
 ```
 
 # 3. Plots
@@ -470,13 +466,14 @@ How does traffic volume vary across different times of the day?
 - Around peak hours (e.g., 15pm–18pm), check whether location/direction differs. — Elif
 - Trend to leave/go to Zurich. Friday evening: leaving Zurich; weekend morning : go to Zurich. — Elif
 - Compare weekday (Monday–Friday) vs. weekend (Saturday–Sunday) changes/patterns. — Aki
+  or Weekday vs weekend
 - Compare seasonal (e.g., summer, winter, etc.) hourly changes. — Aki
 ################################################################
 
 
 ### Average Traffic Volume by Hour
 
-```{r}
+```{r cache=TRUE}
 traffic_hourly <- traffic_weather |>
   group_by(hour) |>
   summarise(
@@ -488,7 +485,7 @@ traffic_hourly <- traffic_weather |>
   )
 ```
 
-```{r}
+```{r cache=TRUE}
 ggplot(
   traffic_hourly,
   aes(
@@ -510,41 +507,8 @@ This chart shows the average traffic volume by hour across a single day: ・Over
 
 Overall, the data shows a classic bimodal commuting pattern, with a gradual morning rise and a sharper, more concentrated evening peak — consistent with typical weekday vehicle traffic behavior.
 
-### Weekday vs weekend
 
-```{r}
-traffic_daytype <- traffic_weather |>
-  group_by(hour, day_type) |>
-  summarise(
-    mean_traffic = mean(
-      Number_of_Vehicles,
-      na.rm = TRUE
-    ),
-    .groups = "drop"
-  )
-```
 
-```{r}
-ggplot(
-  traffic_daytype,
-  aes(
-    x = hour,
-    y = mean_traffic,
-    colour = day_type
-  )
-) +
-  geom_line(linewidth = 1) +
-  geom_point() +
-  labs(
-    title = "Traffic Volume by Hour: Weekdays vs Weekends",
-    x = "Hour of Day",
-    y = "Average Number of Vehicles",
-    colour = "Day Type"
-  ) +
-  theme_bw()
-```
-
-This chart shows the key differences in traffic patterns between weekdays (red line) and weekends (teal line). ・Weekday traffic starts rising much earlier and more sharply (commute-driven), while weekend traffic rises more gradually. ・Weekday peaks (both morning and evening) are notably higher than weekend peaks, reflecting structured commuting behavior. ・Weekend traffic is more evenly distributed across daytime hours, lacking the two distinct peaks seen on weekdays. ・Both day types converge to similarly low volumes late at night, though weekends dip lower overnight.
 
 
 ## 3.2 RQ2 — Weather and Traffic Volume
@@ -554,50 +518,15 @@ How are weather conditions associated with traffic volume in Zurich in 2025?
 ################################################################
 <Task Splitting>
 
-- Hour × weather condition	Weather effect across the day
-- Temperature vs traffic	Continuous relationship	
- 
+- 
+- 
+- 
+- 
 
 ################################################################
 
-### Does the association between temperature and traffic volume differ across meteorological stations?
-
-```{r}
-temperature_long <- traffic_weather_selected |>
-  select(
-    join_hour,
-    Number_of_Vehicles,
-    starts_with("T_")
-  ) |>
-  pivot_longer(
-    cols = starts_with("T_"),
-    names_to = "weather_station",
-    values_to = "temperature"
-  )
-```
 
 
-```{r}
-ggplot(
-  temperature_long,
-  aes(
-    x = temperature,
-    y = Number_of_Vehicles
-  )
-) +
-  geom_point(alpha = 0.15) +
-  geom_smooth(
-    method = "lm",
-    se = FALSE
-  ) +
-  facet_wrap(~ weather_station) +
-  labs(
-    title = "Temperature and Traffic Volume Across Weather Stations",
-    x = "Temperature (°C)",
-    y = "Number of Vehicles"
-  ) +
-  theme_bw()
-```
 
 ## 3.3 RQ3 — Location and Traffic Volume
 
@@ -605,13 +534,16 @@ How does traffic volume differ across traffic counting locations and directions 
 
 ################################################################
 <Task Splitting>
-
+- 
+- 
+- 
+- 
 
 
 ################################################################
 
 
-```{r}
+```{r cache=TRUE}
 traffic_location <- traffic_weather_selected |>
   group_by(
     ZS_Name,
@@ -626,7 +558,7 @@ traffic_location <- traffic_weather_selected |>
   )
 ```
 
-```{r}
+```{r cache=TRUE}
 top_locations <- traffic_location |>
   slice_max(mean_traffic, n = 20)  # Select Top 20 locations
 
@@ -653,41 +585,3 @@ ggplot(
 
 To what extent can traffic volume be explained by temporal, weather and location-related variables?
 
-```{r}
-traffic_weather_selected <- traffic_weather_selected |>
-  mutate(
-    hour = factor(hour),
-    day_type = factor(day_type),
-    ZS_Name = factor(ZS_Name),
-    Direction = factor(Direction)
-  )
-```
-
-Model 01 — Time + Weather
-
-```{r}
-model_01 <- lm(
-  Number_of_Vehicles ~
-    hour +
-    day_type +
-    mean_temperature,
-  data = traffic_weather_selected
-)
-```
-
-```{r}
-summary(model_01)
-```
-
-Model 02 — Time + Weather + Location   (maybe need to consider interaction???)
-
-```{r}
-model_02 <- lm(
-  Number_of_Vehicles ~
-    hour +
-    day_type +
-    mean_temperature +
-    ZS_Name,
-  data = traffic_weather_selected
-)
-```
