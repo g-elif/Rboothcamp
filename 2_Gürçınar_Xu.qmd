@@ -1,20 +1,13 @@
 ---
 title: "Exploring Traffic Volume in Zurich: The Role of Weather, Time and Location in 2025"
+author: "Elif Gürçınar" "Qiu Xu"
 format: html
 editor: visual
 ---
 
-## Quarto
+The hypothetical client - The City of Zurich's Department of Mobility and Transport
 
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(
-echo = TRUE,
-warning = FALSE,
-message = FALSE
-)
-```
+Question:Why does traffic matter?
 
 # 1. Introduction
 
@@ -28,20 +21,33 @@ The objective of this project is to explore traffic volume in Zurich during 2025
 
 ## 1.3 Research questions
 
-RQ1. Temporal patterns How does traffic volume vary across different times of the day and days of the week in Zurich in 2025?
-
-RQ2. Weather How are weather conditions associated with traffic volume in Zurich in 2025?
-
-RQ3. Location How does traffic volume differ across traffic counting locations and directions in Zurich in 2025?
-
-RQ4.Model To what extent can traffic volume be explained by temporal, weather and location-related variables?
+RQ1. How does traffic volume in Zurich vary across hours, weekdays, seasons and directions?\
+RQ2. How are weather conditions associated with traffic volume in Zurich in 2025?\
+RQ3. How does traffic volume vary across locations in Zurich, and where are the main traffic hotspots?\
+RQ4. To what extent can temporal and weather variables explain traffic volume in Zurich?\
 
 # 2. Data sources
 
-```{r}
+```{r cache=TRUE}
 library(tidyverse)
-library(dplyr)
 library(lubridate)
+```
+
+```{r cache=TRUE}
+install.packages("maptiles")
+library(maptiles)
+```
+
+```{r cache=TRUE}
+install.packages("tidyterra")
+library(tidyterra)
+```
+
+```{r cache=TRUE}
+library(sf)
+library(leaflet)
+library(osmdata)
+library(viridis)
 ```
 
 ## 2.1 Inspecting the traffic data
@@ -76,7 +82,6 @@ traffic |>
       100 * missing_values / nrow(traffic)
   ) |>
   arrange(desc(missing_values))
-
 ```
 
 Missing values were identified only in Number_of_Vehicles. A total of 107,602 traffic counts are missing, corresponding to approximately 5.84% of all traffic observations. The remaining variables do not contain values encoded as NA. However, some character variables may use labels such as “Unbekannt” instead of NA, which will be checked separately.
@@ -166,9 +171,21 @@ traffic <- traffic |>
   )
 ```
 
-## Traffic data dictionary
+**Traffic data dictionary**
 
-MSID：Unique ID of the measurement station. ZS_ID：Unique ID of the traffic counting point. ZS_Name:Name of the traffic counting point. Axis: The road axis associated with the traffic counting point. Easting: Easting coordinate. Northing: Northing coordinate. Direction: Direction of traffic being measured. K_Number: Road Number. K_Name: Road Name. Number_of_Detectors:Number of Detectors. D1_ID:ID of the first detector. Measurement_DateTime: Date and exact time of measurement. Number_of_Vehicles: Number of vehicles detected during the measurement period. Vehicle_Count_Status: Quality or availability of the vehicle count data. (e.g., Gemessen → Measured;Fehlend → Missing;Imputiert → Imputed)
+MSID：Unique ID of the measurement station.\
+ZS_ID：Unique ID of the traffic counting point.\
+ZS_Name:Name of the traffic counting point.\
+Axis: The road axis associated with the traffic counting point.\
+Easting: Easting coordinate. Northing: Northing coordinate.\
+Direction: Direction of traffic being measured.\
+K_Number: Road Number. K_Name: Road Name.\
+Number_of_Detectors:Number of Detectors.\
+D1_ID:ID of the first detector.\
+Measurement_DateTime: Date and exact time of measurement.\
+Number_of_Vehicles: Number of vehicles detected during the measurement period.\
+Vehicle_Count_Status: Quality or availability of the vehicle count data.\
+(e.g., Gemessen → Measured;Fehlend → Missing;Imputiert → Imputed)
 
 ## 2.3 Preparing traffic date and time
 
@@ -266,9 +283,15 @@ weather |>
 
 Most of the missing values occur at the Rosengartenstrasse station, where temperature and relative humidity are each missing for 102 observations. The remaining missing values occur only occasionally across other stations and parameters. Because the overall missing percentage is very small, the observations will be retained as missing values at this stage. No values are removed or replaced before the exploratory analysis.
 
-## Weather data dictionary
+**Weather data dictionary**
 
-Measurement_DateTime:Date and exact time when the weather measurement was taken. Location:Name of the weather station where the measurement was taken. Parameter:Type of weather variable being measured, e.g. temperature, relative humidity, or air pressure. Interval:Time interval over which the weather measurement was recorded, e.g. one hour (h1). Unit:Unit in which the weather parameter is measured, e.g. °C, %, hPa, or m/s. Value Measured Value:Numerical value of the corresponding weather parameter. Status:Status indicating the quality or processing state of the weather measurement.
+Measurement_DateTime:Date and exact time when the weather measurement was taken.\
+Location:Name of the weather station where the measurement was taken.\
+Parameter:Type of weather variable being measured, e.g. temperature, relative humidity, or air pressure.\
+Interval:Time interval over which the weather measurement was recorded, e.g. one hour (h1).\
+Unit:Unit in which the weather parameter is measured, e.g. °C, %, hPa, or m/s.\
+Value Measured Value:Numerical value of the corresponding weather parameter.\
+Status:Status indicating the quality or processing state of the weather measurement.
 
 ## 2.6 Preparing meteorological and weather date and time
 
@@ -307,7 +330,7 @@ weather |>
   )
 ```
 
-## 2.7 Reshaping the meteorological data （long → wide）
+## 2.7 Reshaping the meteorological data (long→wide)
 
 The weather dataset is initially stored in long format. Each hour contains measurements for several weather parameters at four weather stations. To obtain one row per hour, each combination of weather parameter and weather station will be transformed into a separate column.
 
@@ -450,105 +473,265 @@ traffic_weather_selected <- traffic_weather |>
 head(traffic_weather_selected, n = 10)
 ```
 
-```{r cache=TRUE}
-colnames(traffic_weather_selected)
-```
+# 3. Data Analysis
 
-# 3. Plots
+## 3.1 Temporal patterns
 
-## 3.1 RQ1 — Traffic volume over time
+RQ1. How does traffic volume in Zurich vary across hours, weekdays, seasons and directions?
 
-How does traffic volume vary across different times of the day?
-
-################################################################
-<Task Splitting>
-
-- Around peak hours (e.g., 15pm–18pm), check whether location/direction differs. — Elif
-- Trend to leave/go to Zurich. Friday evening: leaving Zurich; weekend morning : go to Zurich. — Elif
-- Compare weekday (Monday–Friday) vs. weekend (Saturday–Sunday) changes/patterns. — Aki
-  or Weekday vs weekend
-- Compare seasonal (e.g., summer, winter, etc.) hourly changes. — Aki
-################################################################
-
-
-### Average Traffic Volume by Hour
+### Plot 1 — Daily Traffic Rhythm
 
 ```{r cache=TRUE}
-traffic_hourly <- traffic_weather |>
+traffic_weather |>
   group_by(hour) |>
   summarise(
-    mean_traffic = mean(
-      Number_of_Vehicles,
-      na.rm = TRUE
-    ),
+    mean_traffic = mean(Number_of_Vehicles, na.rm = TRUE),
     .groups = "drop"
-  )
-```
-
-```{r cache=TRUE}
-ggplot(
-  traffic_hourly,
-  aes(
-    x = hour,
-    y = mean_traffic
-  )
-) +
-  geom_line() +
+  ) |>
+  ggplot(aes(x = hour, y = mean_traffic)) +
+  geom_line(linewidth = 0.5) +
   geom_point() +
   labs(
-    title = "Average Traffic Volume by Hour",
-    x = "Hour of Day",
-    y = "Average Number of Vehicles"
+    title = "Traffic volume by hour of the day",
+    x = "Hour of day",
+    y = "Mean number of vehicles"
   ) +
   theme_bw()
 ```
 
-This chart shows the average traffic volume by hour across a single day: ・Overnight low: Traffic volume is lowest between midnight and 4 AM, bottoming out around 3 AM (roughly 50 vehicles). ・Morning peak: Volume rises sharply starting around 5 AM, climbing from about 140 to nearly 390 vehicles by 7 AM, then levels off at a relatively high plateau (around 400–460 vehicles) from 8 AM to 14 PM. ・Evening peak: Traffic reaches its daily maximum around 16–17 PM (approximately 530–540 vehicles). ・Evening decline: After 17 PM, volume drops steadily, falling to around 180 vehicles by 23 PM.
+This chart shows the average traffic volume by hour across a single day:\
+・Overnight low: Traffic volume is lowest between midnight and 4 AM, bottoming out around 3 AM (roughly 50 vehicles).\
+・Morning peak: Volume rises sharply starting around 5 AM, climbing from about 140 to nearly 390 vehicles by 7 AM, then levels off at a relatively high plateau (around 400–460 vehicles) from 8 AM to 14 PM.\
+・Evening peak: Traffic reaches its daily maximum around 16–17 PM (approximately 530–540 vehicles).\
+・Evening decline: After 17 PM, volume drops steadily, falling to around 180 vehicles by 23 PM.
 
 Overall, the data shows a classic bimodal commuting pattern, with a gradual morning rise and a sharper, more concentrated evening peak — consistent with typical weekday vehicle traffic behavior.
 
+### Plot 2 — Weekday × Hour Traffic Intensity
 
+```{r cache=TRUE}
+traffic_weather |> 
+  mutate(
+    weekday = weekdays(date),
+    weekday = factor(
+      weekday,
+      levels = c("Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"
+      ) 
+    )
+  ) |>
+  group_by(weekday, hour) |>
+  summarise(
+    mean_traffic = mean(Number_of_Vehicles, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  ggplot(aes(x = hour, y = weekday, fill = mean_traffic)) +
+  geom_tile() +
+  labs(
+    title = "Heatmap of traffic intensity by weekday and hour",
+    x = "Hour of day",
+    y = "Day of week",
+    fill = "Mean traffic"
+  ) +
+  theme_bw()
+```
 
+Traffic intensity varies substantially across both weekdays and hours of the day. The lowest volumes occur during the night and early morning, while traffic increases sharply from around 5–7 AM. During the daytime, traffic remains relatively high and reaches its highest levels in the late afternoon. The heatmap also shows clear differences between weekdays and weekends, indicating that daily traffic patterns depend on both the time of day and the day of the week.
 
+### Plot 3 — Daily Traffic Profiles by Direction
 
-## 3.2 RQ2 — Weather and Traffic Volume
+```{r cache=TRUE}
+top_directions <- traffic_weather |>
+  count(Direction, sort = TRUE) |>
+  slice_head(n = 10) |>
+  pull(Direction)
 
-How are weather conditions associated with traffic volume in Zurich in 2025?
+traffic_weather |>
+  filter(Direction %in% top_directions) |>
+  group_by(hour, Direction) |>
+  summarise(
+    mean_traffic = mean(
+      Number_of_Vehicles,
+      na.rm = TRUE
+    ),
+    .groups = "drop"
+  ) |>
+  ggplot(
+    aes(
+      x = hour,
+      y = mean_traffic,
+      colour = Direction
+    )
+  ) +
+  geom_line(linewidth = 1) +
+  geom_point(alpha = 0.5) +
+  labs(
+    title = "Hourly traffic profiles for the selected directions",
+    x = "Hour of day",
+    y = "Mean number of vehicles",
+    colour = "Direction"
+  ) +
+  theme_bw()
+```
 
-################################################################
-<Task Splitting>
+The hourly traffic profiles differ across the selected traffic directions. Most directions follow a similar overall daily pattern, with lower traffic during the night, a strong increase in the morning, and higher volumes during the daytime and afternoon. However, the magnitude and shape of the peaks vary between directions, suggesting that traffic flow is not evenly distributed across different directions.
 
-- 
-- 
-- 
-- 
+### Plot 4 — Seasonal Traffic Patterns
 
-################################################################
+```{r cache=TRUE}
+traffic_season <- traffic_weather |>
+  mutate(
+    season = case_when(
+      month(date) %in% c(12, 1, 2) ~ "Winter",
+      month(date) %in% c(3, 4, 5) ~ "Spring",
+      month(date) %in% c(6, 7, 8) ~ "Summer",
+      TRUE ~ "Autumn"
+    )
+  ) |>
+  group_by(season, hour) |>
+  summarise(
+    mean_traffic = mean(Number_of_Vehicles, na.rm = TRUE),
+    .groups = "drop"
+  )
 
+ggplot(
+  traffic_season,
+  aes(x = hour, y = mean_traffic)
+) +
+  geom_line(linewidth = 0.8) +
+  facet_wrap(~ season) +
+  labs(
+    title = "Hourly traffic patterns across the four seasons",
+    x = "Hour of day",
+    y = "Average vehicles"
+  ) +
+  theme_bw()
+```
 
+The four seasons show broadly similar daily traffic patterns: traffic is lowest during the night and early morning, rises rapidly after around 5 AM, reaches its highest level in the late afternoon, and then declines in the evening. Although the overall traffic volume differs slightly across seasons, the daily pattern remains stable, suggesting that hourly effects are stronger than seasonal effects.
 
+***Therefore, season will not be included in the final model.***
 
-## 3.3 RQ3 — Location and Traffic Volume
+## 3.2 Weather and traffic
 
-How does traffic volume differ across traffic counting locations and directions in Zurich in 2025?
+RQ2. How are weather conditions associated with traffic volume in Zurich in 2025?
 
-################################################################
-<Task Splitting>
-- 
-- 
-- 
-- 
+### Plot 5 — Traffic Volume in Relation to Temperature
 
+```{r cache=TRUE}
+traffic_weather |>
+  mutate(
+    mean_temperature = rowMeans(
+      cbind(
+        T_Zch_Heubeeribüel,
+        T_Zch_Rosengartenstrasse,
+        T_Zch_Schimmelstrasse,
+        T_Zch_Stampfenbachstrasse
+      ),
+      na.rm = TRUE
+    )
+  ) |>
+  ggplot(aes(
+    x = mean_temperature,
+    y = Number_of_Vehicles
+  )) +
+  geom_point(alpha = 0.2) +
+  geom_smooth(method = "lm") +
+  labs(
+    title = "Overall relationship between temperature and traffic volume",
+    x = "Mean temperature across weather stations (°C)",
+    y = "Number of vehicles",
+  ) +
+  theme_bw()
+```
 
-################################################################
+Traffic volume shows a positive but relatively weak relationship with temperature. The large spread of observations indicates that temperature alone does not strongly explain traffic volume. This is consistent with the modelling results, where adding temperature improved the adjusted (R\^2) only slightly.
 
+### Plot 6 — Temperature–Traffic Relationship by Hour
+
+```{r cache=TRUE}
+traffic_weather |>
+  mutate(
+    mean_temperature = rowMeans(
+      cbind(
+        T_Zch_Heubeeribüel,
+        T_Zch_Rosengartenstrasse,
+        T_Zch_Schimmelstrasse,
+        T_Zch_Stampfenbachstrasse
+      ),
+      na.rm = TRUE
+    )
+  ) |>
+  ggplot(
+    aes(
+      x = mean_temperature,
+      y = Number_of_Vehicles
+    )
+  ) +
+  geom_point(alpha = 0.15) +
+  geom_smooth(
+    method = "lm",
+    se = FALSE
+  ) +
+  facet_wrap(~ hour) +
+  labs(
+    title = "Temperature–traffic relationship across different hours",
+    x = "Mean temperature (°C)",
+    y = "Number of vehicles"
+  ) +
+  theme_bw()
+```
+
+The relationship between temperature and traffic differs across hours of the day. The hourly panels show very different traffic levels, while the fitted lines are generally shallow. This suggests that time of day is much more important for traffic volume than temperature, although the temperature–traffic association varies somewhat during daytime hours.
+
+***This pattern supports including an hour–temperature interaction in the final model.***
+
+### Plot 7 — Temperature Distributions Across Weather Stations
+
+```{r cache=TRUE}
+temperature_long <- traffic_weather_selected |>
+  select(
+    ZS_Name,
+    T_Zch_Heubeeribüel,
+    T_Zch_Rosengartenstrasse,
+    T_Zch_Schimmelstrasse,
+    T_Zch_Stampfenbachstrasse
+  ) |>
+  pivot_longer(
+    cols = starts_with("T_"),
+    names_to = "weather_station",
+    values_to = "temperature"
+  )
+
+ggplot(
+  temperature_long,
+  aes(
+    x = weather_station,
+    y = temperature
+  )
+) +
+  geom_boxplot() +
+  coord_flip() +
+  labs(
+    title = "Temperature distributions at the four weather stations",
+    x = "Weather station",
+    y = "Temperature (°C)"
+  ) +
+  theme_bw()
+```
+
+The four weather stations show broadly similar temperature distributions, with comparable medians and interquartile ranges. However, some differences in the spread and extreme values can be observed between stations.
+
+***Overall, the stations provide consistent measurements of the same general temperature pattern, supporting the use of their average temperature as a single weather variable in the traffic analysis.***
+
+## 3.3 Location and direction
+
+RQ3. How does traffic volume vary across locations in Zurich, and where are the main traffic hotspots?
+
+### Plot 8 — The Busiest Traffic Counting Locations in Zurich
 
 ```{r cache=TRUE}
 traffic_location <- traffic_weather_selected |>
-  group_by(
-    ZS_Name,
-    Direction
-  ) |>
+  group_by(ZS_Name, Direction) |>
   summarise(
     mean_traffic = mean(
       Number_of_Vehicles,
@@ -556,11 +739,9 @@ traffic_location <- traffic_weather_selected |>
     ),
     .groups = "drop"
   )
-```
 
-```{r cache=TRUE}
 top_locations <- traffic_location |>
-  slice_max(mean_traffic, n = 20)  # Select Top 20 locations
+  slice_max(mean_traffic, n = 20)
 
 ggplot(
   top_locations,
@@ -573,15 +754,594 @@ ggplot(
   geom_point(size = 3) +
   coord_flip() +
   labs(
-    title = "Top 20 Locations by Average Traffic Volume",
-    x = "Traffic Counting Location",
-    y = "Average Number of Vehicles",
+    title = "Average traffic volume at the top locations",
+    x = "Traffic counting location",
+    y = "Average number of vehicles",
     colour = "Direction"
   ) +
   theme_bw()
 ```
 
-## 3.4 RQ4 — Combined Traffic + Weather Model
+The average traffic volume varies substantially across the busiest counting locations. The highest average traffic is observed at Autobahn A1 (Anschluss Schwamendingen), followed by several locations on Rosengartenstrasse and other major roads. The colours show that different traffic directions are represented across these locations, indicating that traffic intensity is spatially heterogeneous across Zurich.
 
-To what extent can traffic volume be explained by temporal, weather and location-related variables?
+***However, because the main focus of the model is the overall relationship between traffic, time and weather, location is treated as spatial context rather than a main predictor in the final model.***
 
+### Plot 9 — Directional Traffic Imbalance Across Locations
+
+```{r cache=TRUE}
+direction_difference <- traffic_weather_selected |>
+  group_by(ZS_Name, Direction) |>
+  summarise(
+    mean_traffic = mean(
+      Number_of_Vehicles,
+      na.rm = TRUE
+    ),
+    .groups = "drop"
+  )
+```
+
+```{r cache=TRUE}
+direction_difference_wide <- direction_difference |>
+  group_by(ZS_Name) |>
+  summarise(
+    max_traffic = max(mean_traffic, na.rm = TRUE),
+    min_traffic = min(mean_traffic, na.rm = TRUE),
+    directional_gap = max_traffic - min_traffic,
+    .groups = "drop"
+  ) |>
+  slice_max(directional_gap, n = 15)
+
+ggplot(
+  direction_difference_wide,
+  aes(
+    x = reorder(ZS_Name, directional_gap),
+    y = directional_gap
+  )
+) +
+  geom_segment(
+    aes(
+      xend = ZS_Name,
+      y = 0,
+      yend = directional_gap
+    )
+  ) +
+  geom_point(size = 3) +
+  coord_flip() +
+  labs(
+    title = "Differences between directional traffic averages",
+    x = "Traffic counting location",
+    y = "Difference between directional averages"
+  ) +
+  theme_bw()
+```
+
+The plot shows that directional traffic differences vary considerably across locations. Hardturmstrasse (Fischerweg) has the largest gap between its directional traffic averages, followed by Hohlstrasse (Erismannstrasse) and Manessestrasse (Weststrasse). This indicates that traffic is not always evenly distributed between directions at the same location.
+
+***These spatial differences motivate the use of aggregated hourly traffic in the final model, rather than including numerous location and direction categories as predictors.***
+
+### Plot 10 — Daily Traffic Profiles Across Zurich Locations
+
+```{r cache=TRUE}
+location_hour <- traffic_weather |>
+  group_by(ZS_Name, hour) |>
+  summarise(
+    mean_traffic = mean(
+      Number_of_Vehicles,
+      na.rm = TRUE
+    ),
+    .groups = "drop"
+  )
+
+top_location_names <- location_hour |>
+  group_by(ZS_Name) |>
+  summarise(
+    overall_mean = mean(mean_traffic, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  slice_max(
+    overall_mean,
+    n = 20
+  ) |>
+  pull(ZS_Name)
+
+location_hour |>
+  filter(
+    ZS_Name %in% top_location_names
+  ) |>
+  ggplot(
+    aes(
+      x = hour,
+      y = mean_traffic
+    )
+  ) +
+  geom_line(
+    linewidth = 0.7
+  ) +
+  geom_point(
+    size = 1.5
+  ) +
+  facet_wrap(
+    ~ ZS_Name,
+    scales = "free_y"
+  ) +
+  labs(
+    title = "Small-multiple hourly profiles for the busiest locations",
+    x = "Hour of day",
+    y = "Mean number of vehicles"
+  ) +
+  theme_bw()
+```
+
+The 20 busiest locations show a highly consistent daily pattern: traffic is lowest during the night and early morning, rises sharply after approximately 5 AM, remains high during the daytime, and reaches its highest level in the late afternoon before declining in the evening. Although the absolute traffic volume differs considerably between locations, the overall shape of the daily profile is remarkably similar.
+
+***This consistency supports using hour of day as a key predictor in the final model, while location is not treated as the main modelling focus.***
+
+### Plot 11 — Zurich’s Busiest Traffic Counting Locations
+
+```{r cache=TRUE}
+# Aggregate traffic by counting location
+traffic_locations <- traffic_weather |>
+  group_by(
+    ZS_ID,
+    ZS_Name,
+    Direction,
+    Easting,
+    Northing
+  ) |>
+  summarise(
+    mean_traffic = mean(
+      Number_of_Vehicles,
+      na.rm = TRUE
+    ),
+    .groups = "drop"
+  )
+```
+
+```{r cache=TRUE}
+# Convert the locations to spatial data
+traffic_locations_sf <- traffic_locations |>
+  st_as_sf(
+    coords = c(
+      "Easting",
+      "Northing"
+    ),
+    crs = 2056
+  )
+```
+
+```{r cache=TRUE}
+# Select the busiest locations and prepare the map
+top_traffic_locations_map <- traffic_locations_sf |>
+  slice_max(
+    order_by = mean_traffic,
+    n = 20
+  ) |>
+  st_transform(3857)
+
+# Prepare "OpenStreetMap" basemap
+top_map <- get_tiles(
+  top_traffic_locations_map,
+  provider = "OpenStreetMap",
+  zoom = 13,
+  crop = TRUE
+)
+
+top_tile_credit <- get_credit("OpenStreetMap")
+
+top_bbox <- st_bbox(
+  top_traffic_locations_map
+)
+```
+
+```{r cache=TRUE}
+# Create the final signature map
+ggplot() +
+  geom_spatraster_rgb(
+    data = top_map,
+    maxcell = 5e6
+  ) +
+  geom_sf(
+    data = top_traffic_locations_map,
+    aes(
+      size = mean_traffic,
+      colour = Direction
+    ),
+    alpha = 0.5
+  ) +
+  coord_sf(
+    xlim = top_bbox[c("xmin", "xmax")],
+    ylim = top_bbox[c("ymin", "ymax")],
+    expand = FALSE
+  ) +
+  scale_size_continuous(
+    name = "Average vehicles",
+    range = c(3, 10)
+  ) +
+  labs(
+    title = "Zurich's Busiest Traffic Counting Locations",
+    subtitle = "Static map of the top 20 traffic locations",
+    colour = "Direction",
+    caption = top_tile_credit
+  ) +
+  theme_bw()
+```
+
+The map shows the spatial distribution of the 20 busiest traffic counting locations in Zurich. Larger points indicate higher average traffic volumes, while colours distinguish the measured traffic directions. The busiest locations are concentrated along major roads and transport corridors, with noticeable differences in traffic intensity between locations. Overall, the map highlights clear spatial heterogeneity in traffic volume across Zurich.
+
+***For the final model, these spatial differences are treated as contextual information, while the main modelling focus remains on time and weather variables.***
+
+## 3.4 Traffic volume modelling
+
+RQ4. To what extent can temporal and weather variables explain traffic volume in Zurich?
+
+### Model 1 - Baseline model: hour and weekday effects
+
+**Model 1 - Mathematical Expression**
+
+$$Y_i = \log(1+\text{mean\_traffic}_i)$$ We chose "log1p(mean_traffic)" as the response variable because the log transformation reduces the influence of high traffic volumes and improves the suitability of the data for linear regression. It also allows zero traffic values to be handled safely.
+
+$$\log(1+\text{mean\_traffic}_i)
+=
+\beta_0
++
+\beta_1 \text{Hour}_i
++
+\beta_2 \text{Weekday}_i
++
+\varepsilon_i$$
+
+```{r cache=TRUE}
+traffic_weather <- traffic_weather |>
+  mutate(
+    weekday = weekdays(date)
+  )
+
+traffic_hourly <- traffic_weather |>
+  group_by(
+    join_hour,
+    hour,
+    weekday
+  ) |>
+  summarise(
+    mean_traffic = mean(
+      Number_of_Vehicles,
+      na.rm = TRUE
+    ),
+    .groups = "drop"
+  )
+```
+
+**Model 1 - Traffic \~ Hour + Weekday**
+
+```{r cache=TRUE}
+# Response variable: log1p(mean_traffic)
+# Predictor variables: hour, weekday
+
+model_1 <- lm(
+  log1p(mean_traffic) ~
+    factor(hour) +
+    weekday,
+  data = traffic_hourly
+)
+
+summary(model_1)
+```
+
+**Model 1 interpretation: Traffic volume explained by hour and weekday**
+
+Model 1 explains a large proportion of the variation in traffic volume, with an adjusted (R\^2) of 0.8443. The overall model is highly significant ((p \< 2.2 \times 10\^{-16})).
+
+The hourly coefficients show a strong daily traffic pattern. Traffic volume is substantially higher during daytime and peak hours than during the reference hour. Weekday effects are smaller than the hourly effects, although several weekday coefficients are statistically significant.
+
+This indicates that time of day is the dominant factor explaining traffic volume, while weekday differences provide additional but smaller explanatory power.
+
+### Model 2 - Adding temperature
+
+**Model 2 - Mathematical Expression**
+
+$$Y_i = \beta_0 + \beta_1\text{Hour}_i + \beta_2\text{Weekday}_i + \beta_3\text{Temperature}_i + \varepsilon_i$$
+
+```{r cache=TRUE}
+#Create hourly temperature
+traffic_hourly <- traffic_weather |>
+  mutate(
+    temperature = rowMeans(
+      cbind(
+        T_Zch_Heubeeribüel,
+        T_Zch_Rosengartenstrasse,
+        T_Zch_Schimmelstrasse,
+        T_Zch_Stampfenbachstrasse
+      ),
+      na.rm = TRUE
+    )
+  ) |>
+  group_by(
+    join_hour,
+    hour,
+    weekday
+  ) |>
+  summarise(
+    mean_traffic = mean(
+      Number_of_Vehicles,
+      na.rm = TRUE
+    ),
+    temperature = mean(
+      temperature,
+      na.rm = TRUE
+    ),
+    .groups = "drop"
+  )
+```
+
+**Model 2 - Traffic \~ Hour + Weekday + Temperature**
+
+```{r cache=TRUE}
+# Response variable: log1p(mean_traffic)
+# Predictor variables: hour, weekday, temperature
+
+model_2 <- lm(
+  log1p(mean_traffic) ~
+    factor(hour) +
+    weekday +
+    temperature,
+  data = traffic_hourly
+)
+
+summary(model_2)
+```
+
+**Model 2 interpretation: Adding temperature**
+
+Model 2 adds temperature to the baseline model. The adjusted (R\^2) increases slightly from 0.8443 to 0.8450, while the residual standard error decreases from 0.3405 to 0.3398.
+
+Temperature has a positive and statistically significant coefficient ((\beta = 0.00292), (p = 8.19 \times 10\^{-10})). However, the improvement in explanatory power is very small.
+
+Therefore, temperature has a statistically detectable association with traffic volume, but its overall contribution is relatively small compared with the strong hourly traffic pattern.
+
+### Model 3 - Hour × temperature interaction
+
+**Model 3 - Mathematical Expression**
+
+$$Y_i = \beta_0 + \beta_1\text{Hour}_i + \beta_2\text{Weekday}_i + \beta_3\text{Temperature}_i + \beta_4(\text{Hour}_i \times \text{Temperature}_i) + \varepsilon_i$$ **Model 3 - Traffic \~ Hour + Weekday + Hour:Temperature**
+
+```{r cache=TRUE}
+# Response variable: log1p(mean_traffic)
+# Predictor variables: hour, weekday, temperature, hour × temperature interaction
+
+model_3 <- lm(
+  log1p(mean_traffic) ~
+    factor(hour) * temperature +
+    weekday,
+  data = traffic_hourly
+)
+
+summary(model_3)
+```
+
+**Model 3 interpretation: Hour × temperature interaction**
+
+Model 3 allows the relationship between temperature and traffic to vary across different hours of the day.
+
+This model achieves the highest adjusted (R\^2) among Models 1–3 (0.8453) and the lowest residual standard error (0.3394). The overall model is highly significant ((p \< 2.2 \times 10\^{-16})).
+
+Importantly, several hour × temperature interaction terms are statistically significant, particularly during the daytime. For example, the interaction terms for hours 8–19 are mostly significant ((p \< 0.05)), indicating that the association between temperature and traffic is not constant throughout the day.
+
+The negative interaction coefficients during many daytime hours suggest that the positive temperature effect observed in the reference hour becomes weaker at these times. Thus, temperature does not have a uniform relationship with traffic throughout the day.
+
+Comparison of Models 1–3 → Overall, Models 1–3 show a consistent pattern:
+
+Model 1: adjusted (R\^2 = 0.8443) Model 2: adjusted (R\^2 = 0.8450) Model 3: adjusted (R\^2 = 0.8453)
+
+Adding temperature produces only a small improvement in explanatory power, while allowing the temperature effect to vary by hour produces a further, although still modest, improvement.
+
+Therefore, Model 3 is the most informative of Models 1–3, because it captures both the strong temporal pattern in traffic and the possibility that weather effects differ across the day.
+
+### Model 4 - Temperature × location interaction
+
+**Model 4 - Mathematical Expression**
+
+$$Y_i = \beta_0 + \beta_1\text{Hour}_i + \beta_2\text{Weekday}_i + \beta_3\text{Temperature}_i + \beta_4\text{ZS\_Name}_i + \beta_5(\text{Temperature}_i \times \text{ZS\_Name}_i) + \varepsilon_i$$
+
+```{r cache=TRUE}
+traffic_hourly_location <- traffic_weather |>
+  group_by(
+    ZS_Name,
+    join_hour,
+    hour,
+    weekday
+  ) |>
+  summarise(
+    mean_traffic = mean(
+      Number_of_Vehicles,
+      na.rm = TRUE
+    ),
+    temperature = mean(
+      c(
+        T_Zch_Heubeeribüel,
+        T_Zch_Rosengartenstrasse,
+        T_Zch_Schimmelstrasse,
+        T_Zch_Stampfenbachstrasse
+      ),
+      na.rm = TRUE
+    ),
+    .groups = "drop"
+  )
+```
+
+**Model 4 - Traffic \~ Hour + Weekday + Temperature × Location**
+
+```{r cache=TRUE}
+# Response variable: log1p(mean_traffic)
+# Predictor variables: hour, weekday, temperature, ZS_Name, temperature × ZS_Name interaction
+
+model_4 <- lm(
+  log1p(mean_traffic) ~
+    factor(hour) +
+    weekday +
+    temperature * ZS_Name,
+  data = traffic_hourly_location
+)
+
+summary(model_4)
+```
+
+**Model 4 Interpretation– Location extension**
+
+Adding location and location-specific temperature effects increases adjusted (R\^2) to 0.8531. This suggests that location explains additional variation in traffic. However, the model is considerably more complex and suffers from substantial missing-data removal. Therefore, it is better interpreted as a spatial extension rather than the main model.
+
+***Overall comparison***
+
+Models 1–3 provide a clear progression:\
+Model 1: traffic is strongly related to time.\
+Model 2: temperature adds a small additional effect.\
+Model 3: the temperature–traffic relationship varies by hour.\
+Model 4: location explains additional spatial variation but substantially increases model complexity.
+
+***Final model choice***
+
+Model 3 is selected as the main model.\
+It provides the best balance between explanatory power, interpretability, and model complexity. More importantly, it directly addresses the project's central question of whether weather is associated with traffic volume and whether this relationship changes throughout the day.
+
+Model 4 is retained as a spatial extension to investigate whether the weather–traffic relationship also differs across locations.
+
+### Plot 12 — Temperature–Traffic Interaction by Hour
+
+```{r cache=TRUE}
+# Model 3: visualise the interaction between temperature and hour
+traffic_hourly |>
+  ggplot(
+    aes(
+      x = temperature,
+      y = log1p(mean_traffic),
+      colour = factor(hour)
+    )
+  ) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(
+    method = "lm",
+    se = FALSE
+  ) +
+  labs(
+    title = "Visualization of the hour × temperature interaction in Model-3",
+    x = "Mean temperature (°C)",
+    y = "Log-transformed mean traffic volume",
+    colour = "Hour"
+  ) +
+  theme_bw()
+
+```
+
+The plot shows that the relationship between temperature and traffic volume varies across hours of the day. Traffic volume differs strongly by hour, with substantially higher levels during daytime and lower levels during the night. The regression lines are generally positive, indicating a positive association between temperature and traffic volume, but their slopes differ across hours. The differences are more pronounced during the daytime, suggesting that the effect of temperature is not constant throughout the day.
+
+**This visual pattern supports the "hour × temperature" interaction included in Model 3.**
+
+### Plot 13 — Model 3 Diagnostic Plots
+
+```{r}
+# Four standard diagnostic panels
+par(mfrow = c(2, 2))
+plot(model_3)
+par(mfrow = c(1, 1))
+```
+
+The four diagnostic panels indicate some deviations from the ideal linear-model assumptions. The residuals are generally centred around zero, but their spread is not completely constant and the Q-Q plot shows deviations from normality, particularly in the tails. The leverage plot does not indicate a large number of highly influential observations. Overall, the model captures the main structure of the data, although the residual assumptions are not perfectly satisfied.
+
+### Plot 14 — Residuals vs Fitted Values
+
+```{r}
+# Residual pattern of Model 3
+plot(
+  model_3,
+  which = 1
+)
+```
+
+The residuals are broadly centred around zero, indicating that the model captures the main systematic pattern. However, some structure and variation in the spread of the residuals remain, suggesting that the model does not explain all variation in traffic volume.
+
+### Plot 15 — Observed vs Predicted Traffic Volume
+
+```{r}
+traffic_hourly$predicted <- predict(model_3)
+
+ggplot(
+  traffic_hourly,
+  aes(
+    x = predicted,
+    y = log1p(mean_traffic)
+  )
+) +
+  geom_point(alpha = 0.2) +
+  geom_abline(
+    intercept = 0,
+    slope = 1
+  ) +
+  labs(
+    title = "Observed and predicted log-transformed traffic volume",
+    x = "Predicted log traffic volume",
+    y = "Observed log traffic volume"
+  ) +
+  theme_bw()
+```
+
+Observed and predicted traffic volumes show a clear positive relationship, with many observations relatively close to the diagonal reference line. This indicates that Model 3 captures the main variation in traffic volume reasonably well, although some observations are still substantially under- or over-predicted.
+
+**Overall conclusion**
+
+Overall, Model 3 provides a reasonable description of the main traffic patterns, particularly the strong effects of time and the interaction between temperature and hour. However, the diagnostic plots show that the assumptions of a linear model are not perfectly met, so the results should be interpreted as describing the main relationships rather than providing exact predictions.
+
+## 3.5. Interactive Traffic Map with leaflet (Chapter of choice)
+
+### Plot 16 — Interactive Traffic Map
+
+```{r}
+top_traffic_leaflet <- traffic_locations_sf |>
+  st_transform(4326)
+```
+
+```{r}
+direction_palette <- colorFactor(
+  palette = "Dark2",
+  domain = top_traffic_leaflet$Direction
+)
+
+leaflet(top_traffic_leaflet) |>
+  addTiles() |>
+  addCircleMarkers(
+    radius = ~sqrt(mean_traffic) / 2,
+    color = ~direction_palette(Direction),
+    fillColor = ~direction_palette(Direction),
+    stroke = TRUE,
+    weight = 1,
+    fillOpacity = 0.6,
+    popup = ~paste0(
+      "<b>Location:</b> ", ZS_Name,
+      "<br><b>Direction:</b> ", Direction,
+      "<br><b>Average vehicles:</b> ",
+      round(mean_traffic, 1)
+    )
+  ) |>
+  addLegend(
+    position = "bottomright",
+    pal = direction_palette,
+    values = ~Direction,
+    title = "Direction"
+  )
+```
+
+The interactive map shows the spatial distribution of traffic counting locations across Zurich. Circle size represents average traffic volume, with larger circles indicating higher traffic intensity. Different colors represent different traffic directions, allowing users to distinguish directional patterns across the city. The largest circles are concentrated along major roads and transport corridors, particularly around the city center and northern and western approaches. The interactive format also allows users to zoom into the map and click on individual locations to inspect their location, direction, and average traffic volume.
+
+## 4. Conclusion
+
+Traffic follows a strong daily rhythm, with substantially higher volumes during daytime and afternoon peak periods.\
+Temperature is statistically associated with traffic volume, but its contribution is relatively small compared with temporal patterns.\
+Traffic volume is spatially heterogeneous, with several major hotspots concentrated along important traffic corridors.\
+The modelling results confirm that time-related variables explain most of the observed variation, while weather provides additional but comparatively limited explanatory information.\
+For the City of Zurich, these findings suggest that traffic management should primarily consider strong time-of-day and weekday patterns, while weather conditions provide additional but comparatively limited explanatory information.
+
+## 5. Limitation
+
+This study has several limitations. First, aggregating traffic observations into hourly mean values may reduce information about individual traffic counting locations and directions. Second, the observed relationships between temperature and traffic volume should be interpreted as associations rather than causal effects. Third, the diagnostic plots indicate that the assumptions of the linear regression model are not perfectly satisfied, with some deviations in the residual distribution and remaining unexplained variation. Finally, approximately 5.84% of the traffic observations have missing values for Number_of_Vehicles, although these observations are consistently identified as missing (Fehlend) in the dataset.
+
+## 6. Generative AI reflection
+
+During this project, we used generative AI as a supporting tool for debugging, troubleshooting code errors, and interpreting statistical model results.We also tried using SKILL.md as an additional reference to check the project structure and requirements. Not all AI suggestions worked immediately; some required further adjustment before they could be applied correctly. Sometimes, asking AI a question resulted in a very long response, which required critical thinking to evaluate whether the suggestions were actually appropriate. This process helped us understand that AI is useful for support and problem-solving, but that the final code and interpretation must always be verified against the actual data and project requirements.
